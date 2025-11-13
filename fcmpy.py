@@ -67,6 +67,33 @@ KEEPALIVE_ENABLED = True
 # Stop sending keepalives if there has been no reply for this many days
 KEEPALIVE_MAX_SILENCE_DAYS = 7
 
+ENV_FILE_PATH = "/etc/fcmpy.env"
+
+def load_env_from_file(path=ENV_FILE_PATH):
+    """
+    Load KEY=VALUE pairs from a simple env file into os.environ,
+    without overriding variables already set in the process env.
+    Lines starting with '#' and empty lines are ignored.
+    """
+    if not os.path.exists(path):
+        return
+
+    try:
+        with open(path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                # don't overwrite explicit environment or CLI overrides
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except Exception as e:
+        print(f"[WARN] Failed to load env from {path}: {e}")
 
 # ---------------------------------------------------------------------
 # Argument parsing (for config, not for management commands)
@@ -75,7 +102,8 @@ KEEPALIVE_MAX_SILENCE_DAYS = 7
 def parse_args():
     p = argparse.ArgumentParser(
         description="Local FCM daemon + CLI",
-        add_help=False  # we do simple manual command handling
+        add_help=False,          # we do manual help / commands
+        allow_abbrev=False       # <- IMPORTANT: don't treat --list as --listen-*
     )
     p.add_argument("--service-account", default=os.getenv("SERVICE_ACCOUNT", DEFAULTS["SERVICE_ACCOUNT"]))
     p.add_argument("--listen-addr", default=os.getenv("LISTEN_ADDR", DEFAULTS["LISTEN_ADDR"]))
@@ -85,9 +113,13 @@ def parse_args():
     p.add_argument("--db-pass", default=os.getenv("DB_PASS", DEFAULTS["DB_PASS"]))
     p.add_argument("--db-name", default=os.getenv("DB_NAME", DEFAULTS["DB_NAME"]))
     p.add_argument("--access-token", default=os.getenv("ACCESS_TOKEN", DEFAULTS["ACCESS_TOKEN"]))
+
+    # Ignore unknown CLI flags like --sample, --list, --stat, etc.
     args, _ = p.parse_known_args()
     return args
 
+# Load config from /etc/fcmpy.env (if present) before parsing args
+load_env_from_file()
 
 args = parse_args()
 

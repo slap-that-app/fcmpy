@@ -167,6 +167,68 @@ Then copy and edit them as needed:
     chmod 600 /etc/fcmpy.env
 
 
+## Getting the Firebase service account JSON
+
+fcmpy uses the **FCM HTTP v1 API**, which requires a **service account JSON**
+from your Firebase / Google Cloud project with the scope:
+
+- `https://www.googleapis.com/auth/firebase.messaging`
+
+You only need **one** JSON file per project, shared by all servers
+running fcmpy.
+
+### Step 1: Create a Firebase / GCP project
+
+If you already have a Firebase project with FCM enabled, you can reuse it.
+
+Otherwise:
+
+1. Go to the Firebase console.
+2. Create a new project (or use an existing one).
+3. Add Firebase Cloud Messaging to the project (it is enabled by default for most Firebase projects).
+
+Under the hood this is backed by a Google Cloud project; the next steps
+use the Google Cloud console to create the service account key.
+
+### Step 2: Create a service account
+
+1. Open the Google Cloud console for the same project.
+2. Go to **IAM & Admin → Service accounts**.
+3. Click **“Create service account”**.
+4. Give it a name like `fcmpy-fcm-sender`.
+5. For basic usage you only need it to be able to send FCM messages.
+   A common pattern is to give it the role:
+
+    - **Firebase Admin SDK Administrator Service Agent**, or
+    - a role that includes the `firebase.messaging` permission.
+
+   (Exact role names may vary; any role that allows sending FCM messages via
+   HTTP v1 is acceptable.)
+
+6. Finish creating the service account.
+
+### Step 3: Create and download the JSON key
+
+1. In the service accounts list, click the service account you just created.
+2. Go to the **“Keys”** tab.
+3. Click **“Add key → Create new key”**.
+4. Choose **JSON**.
+5. Download the JSON file.
+
+This is the file fcmpy will use.
+
+### Step 4: Place the JSON and configure fcmpy
+
+On your server:
+
+1. Copy the JSON to a safe location, for example:
+
+   ```bash
+   mkdir -p /var/secrets
+   cp <downloaded>.json /var/secrets/fcmpy-service-account.json
+   chmod 600 /var/secrets/fcmpy-service-account.json
+
+
 ## Database schema
 
 `fcmpy.py` can create / patch the tables automatically on start, but the main
