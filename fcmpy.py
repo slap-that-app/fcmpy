@@ -85,7 +85,8 @@ def parse_args():
     p.add_argument("--db-pass", default=os.getenv("DB_PASS", DEFAULTS["DB_PASS"]))
     p.add_argument("--db-name", default=os.getenv("DB_NAME", DEFAULTS["DB_NAME"]))
     p.add_argument("--access-token", default=os.getenv("ACCESS_TOKEN", DEFAULTS["ACCESS_TOKEN"]))
-    return p.parse_args()
+    args, _ = p.parse_known_args()
+    return args
 
 
 args = parse_args()
@@ -108,19 +109,37 @@ def load_service_account(path):
         return json.load(f)
 
 
-try:
-    sa = load_service_account(args.service_account)
-    PROJECT_ID = sa.get("project_id")
-    if not PROJECT_ID:
-        print("❌ Missing project_id in service account JSON")
-        sys.exit(1)
-except Exception as e:
-    print(f"❌ Failed to load service account: {e}")
-    sys.exit(1)
+# Service account and project ID are loaded lazily
+sa = None
+PROJECT_ID = None
 
+def ensure_service_account_loaded():
+    """
+    Load Firebase service account JSON once, on demand.
+    Returns True if loaded successfully, False otherwise.
+    """
+    global sa, PROJECT_ID
+    if sa is not None and PROJECT_ID:
+        return True
+
+    try:
+        sa_local = load_service_account(args.service_account)
+        project_id = sa_local.get("project_id")
+        if not project_id:
+            print("❌ Missing project_id in service account JSON")
+            return False
+        sa = sa_local
+        PROJECT_ID = project_id
+        return True
+    except Exception as e:
+        print(f"❌ Failed to load service account: {e}")
+        return False
 
 def get_access_token():
     """Return cached OAuth token for FCM HTTP v1, refreshing when needed."""
+    if not ensure_service_account_loaded():
+        raise Exception("Service account is not loaded (SERVICE_ACCOUNT not set or file missing)")
+
     if TOKEN_CACHE["value"] and time.time() < TOKEN_CACHE["exp"] - 60:
         return TOKEN_CACHE["value"]
 
@@ -154,14 +173,20 @@ def reload_service_account():
     """Reload service account from disk (used by /reload)."""
     global sa, PROJECT_ID
     try:
-        sa = load_service_account(args.service_account)
-        PROJECT_ID = sa.get("project_id")
+        sa_local = load_service_account(args.service_account)
+        project_id = sa_local.get("project_id")
+        if not project_id:
+            print("[ERR reload_service_account] Missing project_id in service account JSON")
+            return False
+        sa = sa_local
+        PROJECT_ID = project_id
         CURRENT_CONFIG["project_id"] = PROJECT_ID
         print(f"[RELOAD] Loaded service account for project: {PROJECT_ID}")
         return True
     except Exception as e:
         print(f"[ERR reload_service_account] {e}")
         return False
+
 
 
 # ---------------------------------------------------------------------
@@ -1021,7 +1046,10 @@ Token management:
 # ---------------------------------------------------------------------
 
 def run_daemon():
-    reload_service_account()
+    if not ensure_service_account_loaded():
+        print("❌ Cannot start daemon: service account not configured.")
+        sys.exit(1)
+
     create_database_tables()
 
     # addresses to listen on (comma-separated)
