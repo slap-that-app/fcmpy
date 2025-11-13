@@ -500,10 +500,11 @@ def send_push(token, username, msg_type, caller, extra_data=None):
 
         fmt_ctx = {
             "caller": caller,
-            "username": username,
+            "callee": username,
             "body": extra_data.get("body", ""),
             "text": extra_data.get("body", ""),
         }
+
 
         title = title_template.format(**fmt_ctx)
         body = body_template.format(**fmt_ctx)
@@ -512,7 +513,7 @@ def send_push(token, username, msg_type, caller, extra_data=None):
         data = {
             "type": msg_type,
             "caller": caller,
-            "username": username,
+            "callee": username,
             "title": title,
             "body": body,
         }

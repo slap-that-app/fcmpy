@@ -16,9 +16,10 @@
 -- This module:
 --   * hooks "message/offline/handle"
 --   * for chat messages to offline users:
+--       - requires a <body> (ignores typing/chatstates)
 --       - extracts username from the JID
 --       - sends HTTP POST with form body:
---           username=<user>&from=<from_jid>&type=message
+--           username=<user>&from=<from_jid>&type=message&body=<preview>
 --
 -- The push daemon then uses its own templates / token store
 -- to deliver an FCM push to the corresponding device(s).
@@ -33,6 +34,13 @@ local function get_pushnotify_url()
         pushnotify_url = module:get_option_string("pushnotify_url", "http://127.0.0.1:9090/");
     end
     return pushnotify_url;
+end
+
+local function trim_preview(text, max_len)
+    if not text then return "" end
+    max_len = max_len or 120;
+    if #text <= max_len then return text end
+    return text:sub(1, max_len) .. "…";
 end
 
 -- Hook for offline messages
@@ -50,22 +58,36 @@ module:hook("message/offline/handle", function (event)
         return;
     end
 
-    -- Only trigger for normal chat messages
+    --[[    -- Only trigger for normal chat messages
     local msg_type = stanza.attr.type or "chat";
     if msg_type ~= "chat" then
         return;
+    end]]
+
+    -- IMPORTANT: ignore chatstates (typing, paused, etc.) and any message
+    -- without a <body> – we only want real text messages here.
+    local body_text = stanza:get_child_text("body");
+    if not body_text or body_text == "" then
+        module:log("debug",
+                "pushnotify: -------------- skip ------- message for %s from %s (no <body>, probably chatstate)",
+                username, from_jid
+        );
+        return;
     end
 
+    local preview = trim_preview(body_text, 120);
+
     module:log("info",
-            "User %s is offline, triggering push for message from %s",
+            "pushnotify: user %s is offline, triggering ----------------- push ------------------------- for message from %s",
             username, from_jid
     );
 
     -- Build POST body (x-www-form-urlencoded)
     local body = string.format(
-            "username=%s&from=%s&type=message",
+            "username=%s&from=%s&type=message&body=%s",
             http.urlencode(username),
-            http.urlencode(from_jid)
+            http.urlencode(from_jid),
+            http.urlencode(preview)
     );
 
     local url = get_pushnotify_url();
@@ -76,9 +98,15 @@ module:hook("message/offline/handle", function (event)
             { method = "POST", body = body },
             function (response_body, code, request)
                 if code == 200 then
-                    module:log("debug", "Push sent OK to daemon for %s (code=%s)", username, tostring(code));
+                    module:log("debug",
+                            "pushnotify: push sent OK to daemon for %s (code=%s)",
+                            username, tostring(code)
+                    );
                 else
-                    module:log("warn", "Push failed (code=%s) for %s", tostring(code), username);
+                    module:log("warn",
+                            "pushnotify: push failed (code=%s) for %s",
+                            tostring(code), username
+                    );
                 end
             end
     );
