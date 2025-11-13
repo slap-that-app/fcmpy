@@ -31,6 +31,77 @@ sending them.
 
 ---
 
+## Integration examples
+
+fcmpy is designed to be called from other services via a simple HTTP POST.
+Below are minimal examples for Kamailio (SIP proxy) and Prosody (XMPP).
+
+---
+
+### Kamailio example (SIP INVITE → push)
+
+Prerequisites:
+
+- `http_client` module loaded in Kamailio
+- A global constant with the fcmpy URL, for example:
+
+  #!define FCM_API "http://127.0.0.1:9090"
+
+Example usage inside a Kamailio routing block (pseudo-logic):
+
+    #!define FCM_API "http://127.0.0.1:9090"
+
+    route[DO_FCM_PUSH] {
+        # $var(username) - callee id / SIP user
+        # $var(caller)   - caller id (From user)
+
+        $var(url)  = FCM_API + "/";
+        $var(body) = "username=" + $var(username)
+                    + "&from=" + $var(caller)
+                    + "&type=" + $var(type);
+
+        # fire-and-forget HTTP POST to fcmpy
+        http_client_query($var(url), $var(body), "$var(push_result)");
+
+        xlog("L_INFO", "FCM push queued for user $var(username) result=$var(push_result)\n");
+    }
+
+You can call `route[DO_FCM_PUSH]` for example in your INVITE handling
+when the callee is not currently registered, or any other case where you
+want to wake up a mobile app.
+
+---
+
+### Prosody example (XMPP offline message → push)
+
+fcmpy can also be driven from Prosody when an XMPP user is offline and
+a message arrives.
+
+1. Put the following in `prosody.cfg.lua`:
+
+    ```lua
+    -- HTTP endpoint of fcmpy
+    pushnotify_url = "http://127.0.0.1:9090/";
+    modules_enabled = {
+        -- ...
+        "pushnotify";  -- our custom module (mod_pushnotify.lua)
+    }
+    ```
+
+2. Install `mod_pushnotify.lua` into your Prosody modules directory
+   (usually `/usr/lib/prosody/modules/` or `/usr/local/lib/prosody/modules/`).
+
+3. The module will hook `message/offline/handle` and call fcmpy for
+   offline messages of type `chat`:
+
+    - Builds `username` from the bare JID
+    - Uses `from` as the caller label
+    - Sends `type=message` to fcmpy
+
+This lets fcmpy re-use the same token store and templates for both SIP
+and XMPP events.
+
+
 ## Architecture
 
 - `fcmpy.py`
