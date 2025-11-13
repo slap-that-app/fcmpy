@@ -1,6 +1,6 @@
 # fcmpy
 
-Small Python daemon + CLI for sending Firebase Cloud Messaging (FCM) HTTP v1 pushes
+Python daemon + CLI for sending Firebase Cloud Messaging (FCM) HTTP v1 pushes
 from local services (SIP proxy, XMPP server, whatever) using a simple HTTP API
 and a MySQL / MariaDB backend.
 
