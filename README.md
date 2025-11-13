@@ -440,3 +440,6 @@ Minimal usage:
     // Mark keepalive reply (e.g. in /keepalive-reply endpoint)
     $mgr->markKeepaliveReplyByToken('AAAA12345');
 
+## Credits
+
+This project were drafted with the assistance of an AI coding assistant (ChatGPT).
